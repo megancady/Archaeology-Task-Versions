@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Archaeological Dig Task</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #2b1d0e;
+    color: #f0e6d0;
+    font-family: 'Georgia', serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .screen { display: none; text-align: center; max-width: 680px; padding: 40px; }
+  .screen.active {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 18px;
+  }
+
+  h1 { font-size: 2rem;  color: #d4a843; }
+  h2 { font-size: 1.5rem; color: #d4a843; }
+  p  { font-size: 1.05rem; line-height: 1.8; color: #d9c9a8; }
+
+  .parchment {
+    background: rgba(180,140,80,0.15);
+    border: 1px solid rgba(212,168,67,0.35);
+    border-radius: 8px;
+    padding: 20px 28px;
+    width: 100%;
+  }
+
+  button {
+    margin-top: 8px;
+    padding: 13px 38px;
+    font-size: 1.05rem;
+    background: #d4a843;
+    color: #2b1d0e;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-family: 'Georgia', serif;
+    letter-spacing: 0.5px;
+    transition: transform 0.1s, background 0.15s;
+  }
+  button:hover { transform: scale(1.04); background: #e0b84e; }
+
+  #subject-id-input {
+    padding: 12px 18px;
+    font-size: 1.1rem;
+    font-family: 'Georgia', serif;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(212,168,67,0.5);
+    border-radius: 6px;
+    color: #f0e6d0;
+    width: 260px;
+    text-align: center;
+    outline: none;
+  }
+  #subject-id-input:focus {
+    border-color: #d4a843;
+    background: rgba(255,255,255,0.12);
+  }
+  #subject-id-error {
+    color: #e07050;
+    font-size: 0.9rem;
+    display: none;
+  }
+
+  /* ── Trial screen ── */
+  #trial-screen {
+    display: none; flex-direction: column;
+    align-items: center; width: 100vw; height: 100vh;
+  }
+  #trial-screen.active { display: flex; }
+
+  #hud {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 28px;
+    background: rgba(20,12,4,0.75);
+    font-size: 0.95rem;
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(212,168,67,0.25);
+  }
+  #hud span { color: #d4a843; font-weight: bold; }
+
+  /* Progress bar (overall trial count — no timer bar) */
+  #progress-bar-wrap {
+    width: 100%; height: 5px;
+    background: rgba(255,255,255,0.05);
+    flex-shrink: 0;
+  }
+  #progress-bar {
+    height: 5px;
+    background: rgba(212,168,67,0.4);
+    width: 0%;
+    transition: width 0.3s;
+  }
+
+  #canvas-wrapper {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    background: #3d2610;
+    position: relative;
+    /* cursor set dynamically */
+  }
+
+  canvas { display: block; }
+
+  /* ── Pickaxe swing (1 second) ── */
+  .pickaxe-anim {
+    position: fixed;
+    font-size: 2.4rem;
+    pointer-events: none;
+    transform-origin: 50% 90%;
+    animation: pickaxeSwing 1.0s ease-out forwards;
+    z-index: 950;
+    margin-left: -14px;
+    margin-top: -38px;
+  }
+  @keyframes pickaxeSwing {
+    0%   { transform: rotate(-60deg); opacity: 1;   }
+    30%  { transform: rotate(30deg);  opacity: 1;   }
+    55%  { transform: rotate(-10deg); opacity: 0.9; }
+    80%  { transform: rotate(10deg);  opacity: 0.6; }
+    100% { transform: rotate(0deg);   opacity: 0;   }
+  }
+
+  /* Dust puff */
+  .dust-puff {
+    position: fixed;
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(200,170,100,0.6) 0%, transparent 70%);
+    pointer-events: none;
+    transform: translate(-50%,-50%) scale(0);
+    animation: dustOut 1.0s ease-out forwards;
+    z-index: 940;
+  }
+  @keyframes dustOut {
+    0%   { transform: translate(-50%,-50%) scale(0);   opacity: 0.9; }
+    50%  { transform: translate(-50%,-50%) scale(1.6); opacity: 0.5; }
+    100% { transform: translate(-50%,-50%) scale(2.8); opacity: 0;   }
+  }
+
+  /* ── Per-click result popup ── */
+  /* Appears at click location, floats up and fades */
+  .click-result {
+    position: fixed;
+    font-size: 1.6rem;
+    font-weight: bold;
+    font-family: Georgia, serif;
+    pointer-events: none;
+    animation: resultFloat 1.2s ease-out forwards;
+    z-index: 960;
+    white-space: nowrap;
+  }
+  .click-result.reward  { color: #FFD700; text-shadow: 0 0 8px rgba(255,200,0,0.6); }
+  .click-result.miss    { color: rgba(200,170,130,0.6); font-size: 1.1rem; }
+
+  @keyframes resultFloat {
+    0%   { opacity: 1;   transform: translateY(0px);   }
+    30%  { opacity: 1;   transform: translateY(-18px);  }
+    100% { opacity: 0;   transform: translateY(-55px);  }
+  }
+
+  /* ── Site transition ── */
+  #site-transition {
+    display: none; position: fixed; inset: 0;
+    background: #1e1006;
+    align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px; z-index: 700;
+  }
+  #site-transition.active { display: flex; }
+  #site-transition h2 { color: #d4a843; font-size: 1.6rem; }
+  #site-transition p  { color: #a89070; font-size: 1rem; }
+
+  /* ── End-of-trial result overlay ── */
+  #result-overlay {
+    display: none; position: fixed; inset: 0;
+    align-items: center; justify-content: center;
+    background: rgba(20,10,0,0.75);
+    z-index: 800; flex-direction: column; gap: 12px;
+  }
+  #result-overlay.active { display: flex; }
+  #result-icon  { font-size: 3.5rem; }
+  #result-text  { font-size: 1.8rem; font-weight: bold; font-family: Georgia, serif; }
+  #result-sub   { font-size: 1rem; color: #a89070; }
+  #result-sub2  { font-size: 0.9rem; color: #7a6040; }
+
+  /* ── ITI ── */
+  #iti-screen {
+    display: none; position: fixed; inset: 0;
+    background: #1e1006;
+    align-items: center; justify-content: center;
+    font-size: 2rem; color: rgba(212,168,67,0.2); z-index: 600;
+  }
+  #iti-screen.active { display: flex; }
+
+  /* Digging-locked cursor indicator */
+  #canvas-wrapper.digging {
+    cursor: wait;
+  }
+  #canvas-wrapper.ready {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Ctext y='22' font-size='22'%3E⛏%3C/text%3E%3C/svg%3E") 4 22, crosshair;
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════ WELCOME ══════════ -->
+<div id="welcome-screen" class="screen active">
+  <h1>⛏ Archaeological Dig Task</h1>
+  <div class="parchment">
+    <p>
+      You are a field archaeologist on a multi-site excavation project.
+      Over the coming weeks, your team will work four ancient dig sites —
+      each with its own terrain and soil characteristics.<br><br>
+      You will spend <strong>4 days at each site</strong>, digging for buried artifacts.
+      Use your pickaxe to excavate different areas across the site each day.<br><br>
+      Some sites are more productive than others.
+    </p>
+  </div>
+  <p style="font-size:0.88rem;color:#7a6040;">
+    This task takes about 15–20 minutes. Please stay focused throughout.
+  </p>
+  <button onclick="showScreen('instructions-screen')">Begin Expedition →</button>
+</div>
+
+<!-- ══════════ INSTRUCTIONS ══════════ -->
+<div id="instructions-screen" class="screen">
+  <h2>Field Instructions</h2>
+  <div class="parchment">
+    <p>
+      ① Each day, you'll arrive at a dig site. A label in the corner tells you
+         which site and day you're on.<br><br>
+      ② <strong>Click anywhere on the screen</strong> to swing your pickaxe
+         and excavate that spot. Each dig attempt takes about one second.<br><br>
+      ③ <strong>After each swing</strong>, you'll immediately find out whether
+         that dig unearthed an artifact 🏺 or came up empty 🪨.<br><br>
+      ④ You can keep digging for the full duration of the day —
+         but only one dig attempt can be made at a time.<br><br>
+      ⑤ After each day, there's a short break before you move on.<br><br>
+      The soil conditions at each site determine whether artifacts are
+      present — your job is to choose the most promising spots to excavate.
+    </p>
+  </div>
+  <button onclick="showScreen('subject-id-screen')">Continue →</button>
+</div>
+
+<!-- ══════════ SUBJECT ID ══════════ -->
+<div id="subject-id-screen" class="screen">
+  <h2>Participant ID</h2>
+  <div class="parchment">
+    <p>Please enter the participant ID provided by the researcher.</p>
+  </div>
+  <input
+    type="text"
+    id="subject-id-input"
+    placeholder="e.g. P001"
+    maxlength="20"
+    autocomplete="off"
+    spellcheck="false"
+  />
+  <div id="subject-id-error">Please enter a participant ID before continuing.</div>
+  <button onclick="confirmSubjectID()">Start Practice Dig</button>
+</div>
+
+<!-- ══════════ TRIAL SCREEN ══════════ -->
+<div id="trial-screen">
+  <div id="hud">
+    <span id="hud-label">Site 1 — Day 1</span>
+    <span id="hud-artifacts">🏺 0 artifacts</span>
+    <span id="hud-overall">Trial 1 / 16</span>
+  </div>
+  <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+  <div id="canvas-wrapper" class="ready">
+    <canvas id="main-canvas"></canvas>
+  </div>
+</div>
+
+<!-- End-of-trial result -->
+<div id="result-overlay">
+  <div id="result-icon">🏺</div>
+  <div id="result-text">Good dig today!</div>
+  <div id="result-sub">Found 3 artifacts</div>
+  <div id="result-sub2">Total: 5 artifacts</div>
+</div>
+
+<!-- Site transition -->
+<div id="site-transition">
+  <div style="font-size:3rem;" id="transit-emoji">🚌</div>
+  <h2 id="transit-title">Travelling to Site 2…</h2>
+  <p id="transit-desc">Setting up camp and reviewing site maps.</p>
+</div>
+
+<!-- ITI -->
+<div id="iti-screen">✦</div>
+
+<!-- ══════════ END ══════════ -->
+<div id="end-screen" class="screen">
+  <h1>🏛️ Expedition Complete!</h1>
+  <p>You've finished excavating all four sites. Excellent fieldwork!</p>
+  <p id="final-score" style="font-size:1.4rem;color:#d4a843;"></p>
+  <div class="parchment">
+    <p style="font-size:0.92rem;">
+      Click below to download your field report and send it to the researcher.
+    </p>
+  </div>
+  <button onclick="downloadData()">📥 Download Field Report</button>
+</div>
+
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  CONFIGURATION
+// ═══════════════════════════════════════════════════════
+
+const CFG = {
+  trialDuration:   25000,  // ms — 25 seconds per trial
+  digDuration:     1000,   // ms — pickaxe animation / lockout per click
+  resultDuration:  1800,   // ms — end-of-trial result overlay
+  itiDuration:     2000,   // ms — blank between trials
+  trialsPerSite:   5,      // 5 trials × 4 sites = 20 trials total
+  canvasW:         720,
+  canvasH:         480,
+  pitX:            360,
+  pitY:            240,
+  pitRx:           95,
+  pitRy:           68,
+};
+
+// ═══════════════════════════════════════════════════════
+//  SITE DEFINITIONS  —  Pavlovian, per-click reward prob
+// ═══════════════════════════════════════════════════════
+
+const SITES = [
+  {
+    id:          1,
+    name:        'Site 1',
+    theme:       'mountains',
+    themeName:   'Mountains',
+    themeEmoji:  '🏔️',
+    condition:   'PAV',
+    rewardProb:  1.00,
+    rewardLabel: '100',
+    soilLight:   '#b8a898',
+    soilDark:    '#5a4a3a',
+    soilMid:     '#8a7060',
+    borderColor: '#7a9ab0',
+    flagColor:   '#7a9ab0',
+    flagLabel:   'α',
+  },
+  {
+    id:          2,
+    name:        'Site 2',
+    theme:       'desert',
+    themeName:   'Desert',
+    themeEmoji:  '🏜️',
+    condition:   'PAV',
+    rewardProb:  0.25,
+    rewardLabel: '25',
+    soilLight:   '#d4b870',
+    soilDark:    '#8a5a20',
+    soilMid:     '#b08040',
+    borderColor: '#c8842a',
+    flagColor:   '#c8842a',
+    flagLabel:   'β',
+  },
+  {
+    id:          3,
+    name:        'Site 3',
+    theme:       'forest',
+    themeName:   'Forest',
+    themeEmoji:  '🌲',
+    condition:   'PAV',
+    rewardProb:  0.50,
+    rewardLabel: '50',
+    soilLight:   '#8aaa60',
+    soilDark:    '#304820',
+    soilMid:     '#5a7838',
+    borderColor: '#3a7a30',
+    flagColor:   '#3a7a30',
+    flagLabel:   'γ',
+  },
+  {
+    id:          4,
+    name:        'Site 4',
+    theme:       'plains',
+    themeName:   'Plains',
+    themeEmoji:  '🌾',
+    condition:   'PAV',
+    rewardProb:  0.75,
+    rewardLabel: '75',
+    soilLight:   '#c8b860',
+    soilDark:    '#706020',
+    soilMid:     '#988040',
+    borderColor: '#a89830',
+    flagColor:   '#a89830',
+    flagLabel:   'δ',
+  },
+];
+
+// ═══════════════════════════════════════════════════════
+//  LATIN SQUARE — 4 counterbalanced site orders
+//  Each row is one group; every site appears in every
+//  position exactly once across the 4 groups.
+// ═══════════════════════════════════════════════════════
+
+const LATIN_SQUARE = [
+  { group: 'A', order: [0, 1, 2, 3] },  // Mountains, Desert, Forest, Plains
+  { group: 'B', order: [1, 2, 3, 0] },  // Desert, Forest, Plains, Mountains
+  { group: 'C', order: [2, 3, 0, 1] },  // Forest, Plains, Mountains, Desert
+  { group: 'D', order: [3, 0, 1, 2] },  // Plains, Mountains, Desert, Forest
+];
+
+// ═══════════════════════════════════════════════════════
+//  TRIAL SEQUENCES
+// ═══════════════════════════════════════════════════════
+
+function buildTrialSequence() {
+  // Build pool: 5 trials per site, then shuffle
+  let pool = [];
+  for (let site of SITES)
+    for (let i = 0; i < CFG.trialsPerSite; i++)
+      pool.push({ site, trialWithinSite: i + 1, isPractice: false });
+  shuffle(pool);
+  return pool;
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    let j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+function buildPracticeSequence() {
+  return [{ site: SITES[0], trialWithinSite: 1, isPractice: true }];
+}
+
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+
+const S = {
+  subjectID:      '',
+  sessionStart:   null,
+  date:           '',
+  totalArtifacts: 0,
+  csvRows:        [],
+  clickData:      [],
+  trialSummary:   [],
+  sequence:       [],
+  seqIndex:       0,
+  isPractice:     false,
+  currentTrial:   null,
+  trialTimer:     null,
+  trialClicks:    [],
+  pitClickNum:    0,
+  bgClickNum:     0,
+  trialArtifacts: 0,
+  isDigging:      false,
+  waveOffset:     0,
+  animFrame:      null,
+};
+
+// ═══════════════════════════════════════════════════════
+//  SUBJECT ID
+// ═══════════════════════════════════════════════════════
+
+function confirmSubjectID() {
+  let val = document.getElementById('subject-id-input').value.trim();
+  if (!val) {
+    document.getElementById('subject-id-error').style.display = 'block';
+    return;
+  }
+  document.getElementById('subject-id-error').style.display = 'none';
+  S.subjectID    = val;
+  S.sessionStart = Date.now();
+  S.date         = new Date().toISOString().slice(0, 10);
+  startPractice();
+}
+
+document.getElementById('subject-id-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') confirmSubjectID();
+});
+
+// ═══════════════════════════════════════════════════════
+//  TIME HELPERS
+// ═══════════════════════════════════════════════════════
+
+function sessionTime() {
+  let ms     = Date.now() - S.sessionStart;
+  let totalS = ms / 1000;
+  let h      = Math.floor(totalS / 3600);
+  let m      = Math.floor((totalS % 3600) / 60);
+  let s      = (totalS % 60).toFixed(6);
+  if (parseFloat(s) < 10) s = '0' + s;
+  return `${h}:${String(m).padStart(2,'0')}:${s}`;
+}
+
+function trialTime() {
+  if (!S.currentTrial) return '0.00000';
+  return ((Date.now() - S.currentTrial.startTime) / 1000).toFixed(5);
+}
+
+// ═══════════════════════════════════════════════════════
+//  CSV ROW BUILDER
+// ═══════════════════════════════════════════════════════
+
+function addRow(xcord, ycord, event) {
+  if (!S.currentTrial) return;
+  let site = S.currentTrial.site;
+  S.csvRows.push({
+    SessionTime:        sessionTime(),
+    Xcord:              xcord,
+    Ycord:              ycord,
+    Event:              event,
+    TrialTime:          trialTime(),
+    TrialType:          site.rewardLabel,
+    PitClickNum:        S.pitClickNum,
+    BackgroundClickNum: S.bgClickNum,
+    TrialNum:           S.currentTrial.trialNumber,
+    SiteID:             site.name.replace(' ', ''),
+    TrialWithinSite:    S.currentTrial.trialWithinSite,
+    Subject:            S.subjectID,
+    Date:               S.date,
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  SCREEN HELPER
+// ═══════════════════════════════════════════════════════
+
+function showScreen(id) {
+  [
+    'welcome-screen','instructions-screen','subject-id-screen',
+    'trial-screen','end-screen','iti-screen',
+    'result-overlay','site-transition'
+  ].forEach(sid => {
+    let el = document.getElementById(sid);
+    if (el) el.classList.remove('active');
+  });
+  if (id) {
+    let el = document.getElementById(id);
+    if (el) el.classList.add('active');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  SCENE DRAWING
+// ═══════════════════════════════════════════════════════
+
+function startDigAnimation(site) {
+  let canvas    = document.getElementById('main-canvas');
+  canvas.width  = CFG.canvasW;
+  canvas.height = CFG.canvasH;
+  S.waveOffset  = 0;
+  function frame() {
+    S.waveOffset += 0.5;
+    drawScene(canvas.getContext('2d'), site, S.waveOffset);
+    S.animFrame = requestAnimationFrame(frame);
+  }
+  S.animFrame = requestAnimationFrame(frame);
+}
+
+function stopDrawAnimation() {
+  if (S.animFrame) { cancelAnimationFrame(S.animFrame); S.animFrame = null; }
+}
+
+function drawScene(ctx, site, tick) {
+  let W  = CFG.canvasW, H = CFG.canvasH;
+  let px = CFG.pitX,    py = CFG.pitY;
+  let rx = CFG.pitRx,   ry = CFG.pitRy;
+
+  // ── PRACTICE: black background, pit only ─────────────
+  if (S.isPractice) {
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, W, H);
+
+    // Pit shadow
+    ctx.save();
+    ctx.filter = 'blur(10px)';
+    ctx.fillStyle = 'rgba(40,20,5,0.5)';
+    ctx.beginPath();
+    ctx.ellipse(px+5, py+8, rx+4, ry+4, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+
+    // Pit fill
+    let pitGrad = ctx.createRadialGradient(px-rx*0.2, py-ry*0.2, 0, px, py, rx*1.1);
+    pitGrad.addColorStop(0,   site.soilDark);
+    pitGrad.addColorStop(0.6, site.soilMid);
+    pitGrad.addColorStop(1,   site.soilLight+'cc');
+    ctx.fillStyle = pitGrad;
+    ctx.beginPath();
+    ctx.ellipse(px, py, rx, ry, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Pit rim
+    ctx.strokeStyle = 'rgba(200,160,80,0.5)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(px, py, rx, ry, 0, 0, Math.PI*2);
+    ctx.stroke();
+
+    // Practice hint
+    ctx.fillStyle = 'rgba(255,235,180,0.45)';
+    ctx.font = '14px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillText('Click anywhere to dig! Each swing takes about 1 second.',
+      W/2, H - 20);
+
+    // Digging pulse
+    if (S.isDigging) {
+      ctx.fillStyle = 'rgba(212,168,67,0.06)';
+      ctx.fillRect(0, 0, W, H);
+    }
+    return;  // skip all the full-scene drawing below
+  }
+
+  // Ground
+  let bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+  bgGrad.addColorStop(0,   '#c9a96e');
+  bgGrad.addColorStop(0.4, site.soilLight);
+  bgGrad.addColorStop(1,   '#8a6535');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Survey grid
+  ctx.strokeStyle = 'rgba(100,70,30,0.2)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= W; x += 60) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+  for (let y = 0; y <= H; y += 60) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+
+  // Grid labels
+  ctx.fillStyle = 'rgba(100,70,30,0.4)';
+  ctx.font = '10px Georgia';
+  ctx.textAlign = 'center';
+  ['A','B','C','D','E','F','G','H','I','J','K','L','M'].forEach((l,i) => {
+    let x = i * 60 + 30;
+    if (x <= W) ctx.fillText(l, x, 12);
+  });
+  ctx.textAlign = 'right';
+  for (let i = 1; i <= 8; i++) {
+    let y = i * 60 - 4;
+    if (y <= H) ctx.fillText(i, 18, y);
+  }
+
+  // Pebbles
+  const PEBBLES = [
+    {x:80,y:60,r:5},{x:200,y:40,r:3},{x:500,y:80,r:4},{x:630,y:55,r:6},
+    {x:680,y:150,r:3},{x:60,y:200,r:5},{x:660,y:300,r:4},{x:100,y:380,r:6},
+    {x:590,y:420,r:3},{x:270,y:430,r:5},{x:400,y:50,r:4},{x:150,y:160,r:3},
+    {x:55,y:310,r:4},{x:700,y:240,r:5},
+  ];
+  PEBBLES.forEach(p => {
+    ctx.fillStyle = 'rgba(110,80,40,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, p.r*1.4, p.r, 0, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // Themed border
+  drawBorder(ctx, site, W, H, tick);
+
+  // Pit shadow
+  ctx.save();
+  ctx.filter = 'blur(10px)';
+  ctx.fillStyle = 'rgba(40,20,5,0.4)';
+  ctx.beginPath();
+  ctx.ellipse(px+5, py+8, rx+4, ry+4, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  // Pit fill
+  let pitGrad = ctx.createRadialGradient(px-rx*0.2, py-ry*0.2, 0, px, py, rx*1.1);
+  pitGrad.addColorStop(0,   site.soilDark);
+  pitGrad.addColorStop(0.6, site.soilMid);
+  pitGrad.addColorStop(1,   site.soilLight+'cc');
+  ctx.fillStyle = pitGrad;
+  ctx.beginPath();
+  ctx.ellipse(px, py, rx, ry, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Pit rim
+  ctx.strokeStyle = 'rgba(200,160,80,0.5)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.ellipse(px, py, rx, ry, 0, 0, Math.PI*2);
+  ctx.stroke();
+
+  // Trowel marks
+  ctx.strokeStyle = 'rgba(50,25,5,0.18)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 5; i++) {
+    let yOff  = -ry*0.6 + i*(ry*0.3);
+    let xSpan = rx * Math.sqrt(1 - Math.pow(yOff/ry, 2)) * 0.9;
+    ctx.beginPath();
+    ctx.moveTo(px-xSpan, py+yOff);
+    ctx.lineTo(px+xSpan, py+yOff);
+    ctx.stroke();
+  }
+
+  // Corner stakes + strings
+  [Math.PI*0.2, Math.PI*0.8, Math.PI*1.2, Math.PI*1.8].forEach(angle => {
+    let sx = px + Math.cos(angle) * (rx+22);
+    let sy = py + Math.sin(angle) * (ry+18);
+    ctx.strokeStyle = 'rgba(220,190,100,0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4,4]);
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(px + Math.cos(angle)*rx*0.95, py + Math.sin(angle)*ry*0.95);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(180,140,60,0.8)';
+    ctx.beginPath();
+    ctx.arc(sx, sy, 4, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // 5 flags: centre pit + 4 corners (inside inner border line, B=36)
+  const B = 36;
+  drawFlag(ctx, site, px + rx*0.7,  py - ry*0.9,  tick, site.flagLabel);  // centre pit
+  drawFlag(ctx, site, B + 18,       B + 14,        tick, site.flagLabel);  // top-left
+  drawFlag(ctx, site, W - B - 18,   B + 14,        tick, site.flagLabel);  // top-right
+  drawFlag(ctx, site, B + 18,       H - B - 14,    tick, site.flagLabel);  // bottom-left
+  drawFlag(ctx, site, W - B - 18,   H - B - 14,    tick, site.flagLabel);  // bottom-right
+
+  // Buried decorations
+  ctx.fillStyle = 'rgba(160,100,60,0.55)';
+  ctx.beginPath();
+  ctx.ellipse(px-rx*0.4, py+ry*0.55, 9, 5, 0.4, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(100,60,30,0.4)';
+  ctx.lineWidth = 1; ctx.stroke();
+  ctx.strokeStyle = 'rgba(210,190,150,0.5)';
+  ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(px-rx*0.6, py+ry*0.1);
+  ctx.lineTo(px-rx*0.3, py-ry*0.15);
+  ctx.stroke();
+  let glint = 0.3 + 0.2*Math.sin(tick*0.08);
+  ctx.fillStyle = `rgba(220,185,60,${glint})`;
+  ctx.beginPath();
+  ctx.arc(px+rx*0.3, py+ry*0.3, 4, 0, Math.PI*2);
+  ctx.fill();
+
+  // Site/Day label
+  drawSiteLabel(ctx, S.currentTrial);
+
+  // "Digging..." overlay pulse when locked
+  if (S.isDigging) {
+    ctx.fillStyle = 'rgba(212,168,67,0.06)';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Practice hint
+  if (S.isPractice) {
+    ctx.fillStyle = 'rgba(255,235,180,0.32)';
+    ctx.font = '14px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillText('Click anywhere to dig! Each swing takes about 1 second.',
+      W/2, H - 14);
+  }
+}
+
+// ── Flag ──────────────────────────────────────────────
+function drawFlag(ctx, site, fx, fy, tick, label) {
+  let wave = Math.sin(tick * 0.06) * 2.5;
+  ctx.strokeStyle = '#8a7050';
+  ctx.lineWidth   = 2;
+  ctx.beginPath();
+  ctx.moveTo(fx, fy + 28);
+  ctx.lineTo(fx, fy - 2);
+  ctx.stroke();
+  ctx.fillStyle = site.flagColor;
+  ctx.beginPath();
+  ctx.moveTo(fx, fy);
+  ctx.lineTo(fx+18+wave, fy+5);
+  ctx.lineTo(fx+16+wave*0.5, fy+12);
+  ctx.lineTo(fx, fy+14);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.font      = 'bold 8px Georgia';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, fx+9+wave*0.4, fy+9);
+}
+
+// ── Themed border ─────────────────────────────────────
+function drawBorder(ctx, site, W, H, tick) {
+  const B = 36;
+  ctx.fillStyle = site.borderColor + '55';
+  ctx.fillRect(0, 0, W, B);
+  ctx.fillRect(0, H-B, W, B);
+  ctx.fillRect(0, B, B, H-2*B);
+  ctx.fillRect(W-B, B, B, H-2*B);
+  ctx.strokeStyle = site.borderColor + 'bb';
+  ctx.lineWidth   = 2;
+  ctx.strokeRect(B-1, B-1, W-2*B+2, H-2*B+2);
+
+  switch (site.theme) {
+    case 'mountains': drawMountainBorder(ctx, site, W, H, B);        break;
+    case 'desert':    drawDesertBorder(ctx, site, W, H, B, tick);    break;
+    case 'forest':    drawForestBorder(ctx, site, W, H, B, tick);    break;
+    case 'plains':    drawPlainsBorder(ctx, site, W, H, B, tick);    break;
+  }
+}
+
+function drawMountainBorder(ctx, site, W, H, B) {
+  ctx.fillStyle = site.borderColor + 'cc';
+  for (let x = 0; x < W; x += 48) {
+    ctx.beginPath();
+    ctx.moveTo(x, B); ctx.lineTo(x+24, 4); ctx.lineTo(x+48, B);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath();
+    ctx.moveTo(x+16, B*0.5); ctx.lineTo(x+24, 4); ctx.lineTo(x+32, B*0.5);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = site.borderColor + 'cc';
+  }
+  for (let x = 0; x < W; x += 48) {
+    ctx.beginPath();
+    ctx.moveTo(x, H-B); ctx.lineTo(x+24, H-4); ctx.lineTo(x+48, H-B);
+    ctx.closePath(); ctx.fill();
+  }
+  for (let y = B; y < H-B; y += 48) {
+    ctx.beginPath();
+    ctx.moveTo(0, y); ctx.lineTo(B*0.6, y+24); ctx.lineTo(0, y+48);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(W, y); ctx.lineTo(W-B*0.6, y+24); ctx.lineTo(W, y+48);
+    ctx.closePath(); ctx.fill();
+  }
+}
+
+function drawDesertBorder(ctx, site, W, H, B, tick) {
+  ctx.fillStyle = site.borderColor + 'aa';
+  ctx.beginPath();
+  ctx.moveTo(0, B);
+  for (let x = 0; x <= W; x += 4)
+    ctx.lineTo(x, B - 10 * Math.sin((x/80) + tick*0.015));
+  ctx.lineTo(W, 0); ctx.lineTo(0, 0); ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(0, H-B);
+  for (let x = 0; x <= W; x += 4)
+    ctx.lineTo(x, H-B + 10*Math.sin((x/80) + tick*0.015 + Math.PI));
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+  drawCactus(ctx, site, 12, H/2-30);
+  drawCactus(ctx, site, W-28, H/2-30);
+}
+
+function drawCactus(ctx, site, x, y) {
+  ctx.fillStyle = site.borderColor + 'dd';
+  ctx.fillRect(x+7, y, 8, 60);
+  ctx.fillRect(x, y+14, 7, 6);
+  ctx.fillRect(x, y+8, 6, 12);
+  ctx.fillRect(x+15, y+20, 7, 6);
+  ctx.fillRect(x+15, y+14, 6, 12);
+}
+
+function drawForestBorder(ctx, site, W, H, B, tick) {
+  for (let x = 10; x < W-10; x += 50) {
+    let sway = Math.sin(tick*0.03 + x*0.1) * 1.5;
+    drawTree(ctx, site, x+sway, 2, 28, 18);
+  }
+  for (let x = 10; x < W-10; x += 50) {
+    let sway = Math.sin(tick*0.03 + x*0.1 + Math.PI) * 1.5;
+    drawTree(ctx, site, x+sway, H-B+2, 28, 18);
+  }
+  for (let y = B+10; y < H-B-10; y += 50) {
+    drawTree(ctx, site, 6,   y, 22, 14);
+    drawTree(ctx, site, W-6, y, 22, 14);
+  }
+}
+
+function drawTree(ctx, site, x, y, height, width) {
+  ctx.fillStyle = site.borderColor + 'cc';
+  for (let t = 0; t < 3; t++) {
+    let tierY = y + t*(height/3);
+    let tierW = width*(1 - t*0.2);
+    ctx.beginPath();
+    ctx.moveTo(x, tierY+height/3);
+    ctx.lineTo(x-tierW/2, tierY+height/3);
+    ctx.lineTo(x, tierY);
+    ctx.lineTo(x+tierW/2, tierY+height/3);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = '#7a5230';
+  ctx.fillRect(x-2, y+height*0.85, 4, height*0.2);
+}
+
+function drawPlainsBorder(ctx, site, W, H, B, tick) {
+  ctx.fillStyle = site.borderColor + 'aa';
+  ctx.beginPath();
+  ctx.moveTo(0, B);
+  for (let x = 0; x <= W; x += 4)
+    ctx.lineTo(x, B*0.4 + B*0.55*Math.sin((x/100) + tick*0.01));
+  ctx.lineTo(W, 0); ctx.lineTo(0, 0); ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(0, H-B);
+  for (let x = 0; x <= W; x += 4)
+    ctx.lineTo(x, H-B*0.4 - B*0.55*Math.sin((x/100) + tick*0.01 + 1.5));
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = site.borderColor + 'ee';
+  ctx.lineWidth = 1.5;
+  for (let x = 20; x < W; x += 18) {
+    let baseY = B*0.6 + B*0.3*Math.sin((x/80) + tick*0.01);
+    let sway  = Math.sin(tick*0.04 + x*0.15) * 2;
+    ctx.beginPath();
+    ctx.moveTo(x, baseY+6);
+    ctx.quadraticCurveTo(x+sway+3, baseY-2, x+sway+1, baseY-8);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x+5, baseY+6);
+    ctx.quadraticCurveTo(x+sway+7, baseY, x+sway+5, baseY-6);
+    ctx.stroke();
+  }
+  for (let x = 20; x < W; x += 18) {
+    let baseY = H-B*0.6 - B*0.3*Math.sin((x/80) + tick*0.01 + 1.5);
+    let sway  = Math.sin(tick*0.04 + x*0.15) * 2;
+    ctx.beginPath();
+    ctx.moveTo(x, baseY-6);
+    ctx.quadraticCurveTo(x+sway+3, baseY+2, x+sway+1, baseY+8);
+    ctx.stroke();
+  }
+}
+
+// ── Site/Day label ────────────────────────────────────
+function drawSiteLabel(ctx, trial) {
+  if (!trial) return;
+  let label = trial.isPractice
+    ? `Practice — ${trial.site.themeName}`
+    : `${trial.site.name}: ${trial.site.themeName}`;
+  ctx.save();
+  ctx.font = 'bold 13px Georgia';
+  let pad = 10;
+  let tw  = ctx.measureText(label).width + pad*2 + 22;
+  ctx.fillStyle = 'rgba(30,15,5,0.7)';
+  roundRect(ctx, 12, 12, tw, 32, 6);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(212,168,67,0.4)';
+  ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = trial.site.flagColor;
+  ctx.beginPath();
+  ctx.arc(12+pad+6, 12+16, 6, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#f0e6d0';
+  ctx.textAlign = 'left';
+  ctx.fillText(label, 12+pad+18, 12+21);
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+// ═══════════════════════════════════════════════════════
+//  FLOW CONTROL
+// ═══════════════════════════════════════════════════════
+
+function startPractice() {
+  S.isPractice = true;
+  S.sequence   = buildPracticeSequence();
+  S.seqIndex   = 0;
+  nextTrial();
+}
+
+function showSiteTransition(site, callback) {
+  document.getElementById('transit-emoji').textContent = site.themeEmoji;
+  document.getElementById('transit-title').textContent =
+    `Travelling to ${site.name}: ${site.themeName}`;
+  document.getElementById('transit-desc').textContent  =
+    `Setting up camp and reviewing site maps for ${site.name}.`;
+  showScreen('site-transition');
+  setTimeout(() => { showScreen(null); callback(); }, CFG.transitDuration);
+}
+
+// ═══════════════════════════════════════════════════════
+//  TRIAL
+// ═══════════════════════════════════════════════════════
+
+function nextTrial() {
+  if (S.seqIndex >= S.sequence.length) {
+    if (S.isPractice) {
+      // Practice done — go straight to main task (no transition screen)
+      S.isPractice = false;
+      S.sequence   = buildTrialSequence();
+      S.seqIndex   = 0;
+
+      document.getElementById('transit-emoji').textContent = '📋';
+      document.getElementById('transit-title').textContent = 'Practice Complete!';
+      document.getElementById('transit-desc').textContent  =
+        'Remember: explore freely. Each pickaxe swing takes about 1 second.';
+      showScreen('site-transition');
+      setTimeout(() => { showScreen(null); nextTrial(); }, 2400);
+      return;
+    } else {
+      endExperiment();
+      return;
+    }
+  }
+
+  let entry = S.sequence[S.seqIndex];
+
+  // Reset per-trial state
+  S.trialClicks    = [];
+  S.pitClickNum    = 0;
+  S.bgClickNum     = 0;
+  S.trialArtifacts = 0;
+  S.isDigging      = false;
+
+  S.currentTrial = {
+    site:             entry.site,
+    trialWithinSite:  entry.trialWithinSite,
+    isPractice:       entry.isPractice,
+    trialNumber:      S.trialSummary.length + 1,
+    startTime:        Date.now(),
+    subjectID:        S.subjectID,
+  };
+
+  // HUD — show site name and overall trial count, no "Day" reference
+  let label = entry.isPractice
+    ? `Practice — ${entry.site.themeName}`
+    : `${entry.site.themeName} Site`;
+  let total = S.sequence.length;
+
+  document.getElementById('hud-label').textContent    = label;
+  document.getElementById('hud-artifacts').textContent =
+    `🏺 ${S.totalArtifacts} artifact${S.totalArtifacts !== 1 ? 's' : ''}`;
+  document.getElementById('hud-overall').textContent  =
+    entry.isPractice ? 'Practice' : `Trial ${S.seqIndex + 1} / ${total}`;
+  document.getElementById('progress-bar').style.width =
+    (S.isPractice ? 0 : (S.seqIndex / total) * 100) + '%';
+
+  document.getElementById('canvas-wrapper').className = 'ready';
+  startDigAnimation(entry.site);
+  showScreen('trial-screen');
+  S.trialTimer = setTimeout(endTrial, CFG.trialDuration);
+}
+
+// ── Click handler ─────────────────────────────────────
+document.getElementById('canvas-wrapper').addEventListener('click', function(e) {
+  if (!S.currentTrial) return;
+  if (S.isDigging) return;   // locked during animation
+
+  // Lock immediately
+  S.isDigging = true;
+  document.getElementById('canvas-wrapper').className = 'digging';
+
+  let now = Date.now();
+  let canvas = document.getElementById('main-canvas');
+  let rect   = canvas.getBoundingClientRect();
+  let x = Math.round((e.clientX - rect.left) * (CFG.canvasW / rect.width));
+  let y = Math.round((e.clientY - rect.top)  * (CFG.canvasH / rect.height));
+
+  let nx    = (x - CFG.pitX) / CFG.pitRx;
+  let ny    = (y - CFG.pitY) / CFG.pitRy;
+  let inPit = (nx*nx + ny*ny) <= 1;
+
+  if (inPit) S.pitClickNum++; else S.bgClickNum++;
+
+  // Record click immediately
+  let rec = {
+    click_x:          x,
+    click_y:          y,
+    in_pit:           inPit ? 1 : 0,
+    dist_from_center: Math.round(Math.hypot(x - CFG.pitX, y - CFG.pitY)),
+    rt_ms:            now - S.currentTrial.startTime,
+  };
+  S.trialClicks.push(rec);
+  if (!S.currentTrial.isPractice)
+    S.clickData.push({ ...rec, siteID: S.currentTrial.site.id });
+
+  // Spawn pickaxe animation
+  spawnPickaxe(e.clientX, e.clientY);
+
+  // After 1 second: resolve reward, show result popup, unlock
+  let site = S.currentTrial.site;
+  setTimeout(() => {
+    if (!S.currentTrial) return; // trial may have ended during animation
+
+    let rewarded = Math.random() < site.rewardProb;
+
+    // Log event
+    addRow(x, y, inPit
+      ? (rewarded ? 'pit_click_reinforced' : 'pit_click_nonreinforced')
+      : (rewarded ? 'bg_click_reinforced'  : 'bg_click_nonreinforced')
+    );
+
+    // Update record with outcome
+    rec.rewarded = rewarded ? 1 : 0;
+
+    if (rewarded) {
+      S.totalArtifacts++;
+      S.trialArtifacts++;
+      document.getElementById('hud-artifacts').textContent =
+        `🏺 ${S.totalArtifacts} artifact${S.totalArtifacts !== 1 ? 's' : ''}`;
+    }
+
+    // Floating result at click location
+    spawnClickResult(e.clientX, e.clientY, rewarded);
+
+    // Unlock for next click
+    S.isDigging = false;
+    if (S.currentTrial) {
+      document.getElementById('canvas-wrapper').className = 'ready';
+    }
+
+  }, CFG.digDuration);
+});
+
+// ── Pickaxe + dust spawn ──────────────────────────────
+function spawnPickaxe(cx, cy) {
+  let dust = document.createElement('div');
+  dust.className  = 'dust-puff';
+  dust.style.left = cx + 'px';
+  dust.style.top  = cy + 'px';
+  document.body.appendChild(dust);
+  dust.addEventListener('animationend', () => dust.remove());
+
+  let pick = document.createElement('div');
+  pick.className   = 'pickaxe-anim';
+  pick.textContent = '⛏';
+  pick.style.left  = cx + 'px';
+  pick.style.top   = cy + 'px';
+  document.body.appendChild(pick);
+  pick.addEventListener('animationend', () => pick.remove());
+}
+
+// ── Per-click result popup ────────────────────────────
+function spawnClickResult(cx, cy, rewarded) {
+  let el = document.createElement('div');
+  el.className  = 'click-result ' + (rewarded ? 'reward' : 'miss');
+  el.textContent = rewarded ? '🏺 Artifact!' : '🪨';
+  el.style.left  = (cx - 30) + 'px';
+  el.style.top   = (cy - 20) + 'px';
+  document.body.appendChild(el);
+  el.addEventListener('animationend', () => el.remove());
+}
+
+// ── End of trial ──────────────────────────────────────
+function endTrial() {
+  clearTimeout(S.trialTimer);
+  stopDrawAnimation();
+  S.isDigging    = false;
+  S.currentTrial = null;
+
+  let entry = S.sequence[S.seqIndex];
+  let n     = S.trialArtifacts;
+
+  // Trial summary
+  if (!entry.isPractice) {
+    S.trialSummary.push({
+      siteID:            entry.site.id,
+      siteName:          entry.site.name,
+      themeName:         entry.site.themeName,
+      rewardProb:        entry.site.rewardProb,
+      trialWithinSite:   entry.trialWithinSite,
+      n_clicks:          S.trialClicks.length,
+      n_in_pit:          S.trialClicks.filter(c => c.in_pit).length,
+      n_rewarded:        n,
+      log10_variability: computeVariability(S.trialClicks),
+    });
+  }
+
+  S.seqIndex++;
+
+  // End-of-trial summary overlay
+  let icon = n > 0 ? '🏺' : '🪨';
+  let text = n > 0 ? `Found ${n} artifact${n !== 1 ? 's' : ''}!` : 'Nothing found today.';
+  let col  = n > 0 ? '#d4a843' : '#8a7060';
+  document.getElementById('result-icon').textContent = icon;
+  document.getElementById('result-text').textContent = text;
+  document.getElementById('result-text').style.color = col;
+  document.getElementById('result-sub').textContent  =
+    `Total: ${S.totalArtifacts} artifact${S.totalArtifacts !== 1 ? 's' : ''}`;
+  document.getElementById('result-sub2').textContent = '';
+  document.getElementById('result-overlay').classList.add('active');
+
+  setTimeout(() => {
+    document.getElementById('result-overlay').classList.remove('active');
+    document.getElementById('iti-screen').classList.add('active');
+    setTimeout(() => {
+      document.getElementById('iti-screen').classList.remove('active');
+      nextTrial();
+    }, CFG.itiDuration);
+  }, CFG.resultDuration);
+}
+
+function endExperiment() {
+  showScreen('end-screen');
+  document.getElementById('final-score').textContent =
+    `You unearthed ${S.totalArtifacts} artifact${S.totalArtifacts !== 1 ? 's' : ''}! 🏺`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  SPATIAL VARIABILITY
+// ═══════════════════════════════════════════════════════
+
+function computeVariability(clicks) {
+  if (clicks.length < 2) return null;
+  let xs    = clicks.map(c => c.click_x).sort((a,b) => a-b);
+  let ys    = clicks.map(c => c.click_y).sort((a,b) => a-b);
+  let mid   = Math.floor(xs.length / 2);
+  let dists = clicks.map(c => Math.hypot(c.click_x - xs[mid], c.click_y - ys[mid]));
+  let mean  = dists.reduce((a,b) => a+b, 0) / dists.length;
+  return +(Math.log10(mean + 1)).toFixed(4);
+}
+
+// ═══════════════════════════════════════════════════════
+//  DATA EXPORT
+// ═══════════════════════════════════════════════════════
+
+function downloadData() {
+  const COLS = [
+    'SessionTime','Xcord','Ycord','Event','TrialTime','TrialType',
+    'PitClickNum','BackgroundClickNum','TrialNum','SiteID',
+    'TrialWithinSite','Subject','Date'
+  ];
+  let rows = S.csvRows.map(r => [
+    r.SessionTime, r.Xcord, r.Ycord, r.Event,
+    r.TrialTime, r.TrialType,
+    r.PitClickNum, r.BackgroundClickNum,
+    r.TrialNum, r.SiteID, r.TrialWithinSite, r.Subject, r.Date,
+  ].join(','));
+
+  let csv = COLS.join(',') + '\n' + rows.join('\n');
+  let blob = new Blob([csv], { type: 'text/csv' });
+  let url  = URL.createObjectURL(blob);
+  let a    = document.createElement('a');
+  a.href = url; a.download = `${S.subjectID}_${S.date}_data.csv`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
